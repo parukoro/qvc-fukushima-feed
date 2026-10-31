@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectDomRecords, scrapeOfficialGuest } from '../scraper.mjs';
+import { collectDomRecords, scrapeOfficialGuest, publicTableRequest, attachPublicNetworkDiagnostics } from '../scraper.mjs';
 
 test('DOM extractor uses actual container and removes hidden date/visible hour spans', () => {
   const removed = [];
@@ -23,10 +23,13 @@ test('scraper waits for delayed correct container and closes isolated browser', 
     assert.equal(options.headless, true);
     return { async close() { closed = true; }, async newContext(options) {
       assert.equal(options.timezoneId, 'Asia/Tokyo');
-      return { async route() {}, async newPage() { return {
+      return { async route() { assert.fail('Normal resources must not be intercepted'); }, async newPage() { return {
+        on() {},
         async goto(url) { assert.equal(url, 'https://qvc.jp/information/feature/guest/guestpedia/1320.html'); return { ok: () => true }; },
         url: () => 'https://qvc.jp/information/feature/guest/guestpedia/1320.html',
-        async waitForFunction(fn, arg, options) { assert.match(fn.toString(), /program_information/); assert.equal(options.timeout, 60_000); waited = true; },
+        async waitForLoadState(state) { assert.equal(state,'load'); },
+        getByRole: () => ({ first:()=>({async scrollIntoViewIfNeeded(){}}) }),
+        async waitForFunction(fn, arg, options) { assert.match(fn.toString(), /program_information/); assert.equal(options.timeout, 120_000); waited = true; },
         locator: () => ({ allTextContents: async () => ['福島豊さん'] }),
         async evaluate(fn) { assert.equal(waited, true); assert.equal(fn, collectDomRecords); return [{ href: 'https://qvc.jp/content/programguide.qvc.202611011900.html', title: 'ハキマックス' }]; }
       }; } };
@@ -35,4 +38,49 @@ test('scraper waits for delayed correct container and closes isolated browser', 
   const feed = await scrapeOfficialGuest({ now, browserFactory });
   assert.equal(feed.programmes[0].start, '2026-11-01T19:00:00+09:00');
   assert.equal(closed, true);
+});
+
+test('public diagnostics allow only exact table endpoints and safe selector fields', () => {
+  const request = {
+    url:()=> 'https://action-table.karte.io/collection/getByKey?api_key=PRIVATE_QUERY',
+    method:()=> 'POST',
+    postData:()=>JSON.stringify({api_key:'PRIVATE_BODY',name:'v2/official_schedule',key:'1320',query_name:'guest',params:{cookie:'PRIVATE_PARAMS'},visitor_id:'PRIVATE_VISITOR'}),
+    failure:()=>({errorText:'net::ERR_FAILED'})
+  };
+  assert.deepEqual(publicTableRequest(request),{endpoint:'/collection/getByKey',method:'POST',name:'v2/official_schedule',key:'1320',query_name:'guest'});
+  assert.equal(publicTableRequest({...request,url:()=> 'https://example.com/collection/getByKey'}),null);
+  assert.equal(publicTableRequest({...request,url:()=> 'https://action-table.karte.io/unrelated'}),null);
+  const handlers={};const network=attachPublicNetworkDiagnostics({on(event,handler){handlers[event]=handler;}});
+  handlers.request(request);handlers.response({request:()=>request,status:()=>403});handlers.requestfailed(request);
+  assert.equal(network[0].status,403);assert.equal(network[0].failure,'net::ERR_FAILED');
+  assert.doesNotMatch(JSON.stringify(network),/PRIVATE|api_key|params|visitor|cookie/);
+});
+
+function fakeBrowser(page,close=()=>{}) {
+  return {async launch(){return {close,async newContext(){return {async newPage(){return page;}};}};}};
+}
+
+test('failure log includes only public DOM excerpt and endpoint metadata, and browser closes', async()=>{
+  const messages=[];let closed=false;
+  const browserFactory=fakeBrowser({
+    on(){},async goto(){return{ok:()=>true};},url:()=> 'https://qvc.jp/information/feature/guest/guestpedia/1320.html',
+    async waitForLoadState(){},getByRole:()=>({first:()=>({async scrollIntoViewIfNeeded(){}})}),
+    async waitForFunction(){const error=new Error('Timeout 120000ms api_key=DO_NOT_LOG cookie=DO_NOT_LOG');error.name='TimeoutError';throw error;},
+    async evaluate(){return{pageTitle:'QVCゲスト 福島豊さん',h1:['福島豊さん'],programContainerCount:0,programmeLinkCount:0,programmeText:''};}
+  },()=>{closed=true;});
+  await assert.rejects(()=>scrapeOfficialGuest({browserFactory,reportDiagnostics:data=>messages.push(data)}),/delayed-programme-container: timeout/);
+  assert.equal(closed,true);assert.equal(messages.length,1);assert.equal(messages[0].reason,'timeout');assert.equal(messages[0].programContainerCount,0);
+  assert.equal(messages[0].scrolledToHeading,true);assert.doesNotMatch(JSON.stringify(messages),/DO_NOT_LOG|api_key|cookie/);
+});
+
+test('default retrieval time is captured after delayed extraction, not navigation start', async()=>{
+  const originalNow=Date.now;let clock=Date.parse('2026-11-01T02:00:00+09:00');const finished=clock+180_000;
+  Date.now=()=>clock;
+  const browserFactory=fakeBrowser({
+    on(){},async goto(){return{ok:()=>true};},url:()=> 'https://qvc.jp/information/feature/guest/guestpedia/1320.html',
+    async waitForLoadState(){},getByRole:()=>({first:()=>({async scrollIntoViewIfNeeded(){}})}),async waitForFunction(){},
+    locator:()=>({async allTextContents(){return['福島豊さん'];}}),
+    async evaluate(){clock=finished;return[{href:'https://qvc.jp/content/programguide.qvc.202611011900.html',title:'ハキマックス'}];}
+  });
+  try{const feed=await scrapeOfficialGuest({browserFactory});assert.equal(Date.parse(feed.retrievedUtc),finished);}finally{Date.now=originalNow;}
 });
