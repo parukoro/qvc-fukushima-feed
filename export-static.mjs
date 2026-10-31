@@ -24,7 +24,7 @@ export function renderStatus(feed) {
 }
 
 export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, clock = Date.now } = {}) {
-  const acquire = scrape ?? (async () => { const { scrapeOfficialGuest } = await import('./scraper.mjs'); return scrapeOfficialGuest(); });
+  const acquire = scrape ?? (async () => { const { scrapeOfficialGuest } = await import('./scraper.mjs'); return scrapeOfficialGuest({browserMode:process.env.QVC_FEED_BROWSER_MODE??'headless'}); });
   const feed = await acquire();
   const now = clock();
   // Static hosting cannot change HTTP200 into 503 after expiry. Clients MUST

@@ -35,10 +35,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check extraction and expiry handling
         run: npm test
-      - name: Install Chromium headless shell on this temporary runner
-        run: npx --no-install playwright install --with-deps chromium --only-shell
+      - name: Install ordinary full Chromium
+        run: npx --no-install playwright install --with-deps chromium --no-shell
       - name: Export fresh official guest-only data
-        run: npm run export
+        env:
+          QVC_FEED_BROWSER_MODE: headed
+        run: xvfb-run -a npm run export
       - name: Prepare canonical programme facts without refresh timestamps
         id: facts
         run: node record-facts.mjs --output-for-actions

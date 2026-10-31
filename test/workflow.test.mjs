@@ -11,6 +11,10 @@ test('Pages workflow uses scheduled/manual public standard runner and scoped pub
   assert.match(yaml, /persist-credentials: false/);
   assert.match(yaml, /package-manager-cache: false/);
   assert.match(yaml, /npm ci --ignore-scripts --no-audit --no-fund/);
+  assert.match(yaml,/playwright install --with-deps chromium --no-shell/);
+  assert.doesNotMatch(yaml,/--only-shell/);
+  assert.match(yaml,/QVC_FEED_BROWSER_MODE: headed/);
+  assert.match(yaml,/xvfb-run -a npm run export/);
   assert.match(yaml, /path: public/);
   assert.match(yaml, /retention-days: 1/);
   assert.match(yaml, /cancel-in-progress: false/);

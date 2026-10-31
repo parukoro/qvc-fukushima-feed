@@ -75,6 +75,10 @@ Pages案を追加した後は10件成功。静的出力の失敗時保持、HTML
 
 失敗時の診断は、公開ページのtitle/h1、`#program_information` の件数・350文字以内のテキスト、正確なKARTEの2取得先のHTTP状態と公開テーブル選択子だけです。画像・完全HTML・POST全体・APIキー・cookie・認証ヘッダーは記録しません。取得時刻はページ読み込み開始時刻ではなく、実際の抽出完了時刻です。
 
+2回目のGitHub実行もコンテナー0件・KARTE対象API通信0件で失敗しました。現在のworkflowは通常のフルChromiumをXvfb上のheadedモードで使います。これはPlaywrightが案内する通常のCI描画方式で、ブラウザ識別やセキュリティ設定の偽装はしません。ローカルの既定はフルChromiumのnew-headlessです。
+
+次の失敗診断には、公開QVC/KARTEスクリプトのHTTP状態・読込失敗、DOM上のscript数、短いJavaScriptエラー、consoleの固定分類も含めます。URLのquery/hash、長い識別子、console生本文、stackは除きます。これによりスクリプト自体が読み込まれなかったのか、実行中エラーなのかを確認できます。
+
 ## 公開資料
 
 - Playwright Library: https://playwright.dev/docs/library
