@@ -18,6 +18,8 @@ test('static export writes only validated fresh data and an escaped status page'
     assert.deepEqual(JSON.parse(await readFile(join(dir, 'qvc-fukushima.json'), 'utf8')), feed);
     const html = await readFile(join(dir, 'index.html'), 'utf8');
     assert.match(html, /data-expiry="2026-10-31T19:00:00.000Z"/);
+    assert.match(html, /datetime="2026-10-31T17:00:00.000Z">2026-11-01 02:00:00 JST（日本時間）/);
+    assert.match(html, /datetime="2026-10-31T19:00:00.000Z">2026-11-01 04:00:00 JST（日本時間）/);
     assert.match(html, /公式番組 &amp; 特集/);
     assert.match(html, /情報期限切れ/);
     const before = await readFile(join(dir, 'qvc-fukushima.json'), 'utf8');

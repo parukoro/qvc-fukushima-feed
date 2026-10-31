@@ -1,6 +1,6 @@
-# 無料の公開候補：GitHub Pages + GitHub Actions
+# 公開済み無料配信：GitHub Pages + GitHub Actions
 
-公開先 `parukoro/qvc-fukushima-feed` と約30分ごとのPages配信はユーザー承認済みです。この担当ではローカルの構成だけを更新し、GitHub操作は行っていません。公開・接続確認は親担当が行います。
+公開先 [parukoro/qvc-fukushima-feed](https://github.com/parukoro/qvc-fukushima-feed) と約30分ごとのPages配信はユーザー承認のもと親担当が公開しました。[JSON](https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json) と [取得状態ページ](https://parukoro.github.io/qvc-fukushima-feed/) が利用できます。この担当はローカル構成の更新のみ行っています。
 
 ## 構成
 
@@ -44,15 +44,19 @@
 2. GitHub認証が利用できる段階で、このフォルダーだけを公開リポジトリへ配置。
 3. GitHub Settings → Pages の公開元をGitHub Actionsへ設定。[公式手順](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 4. 既定ブランチへ配置後、workflowを手動実行して、公式出演予定の取得と公開結果を確認。
-5. `https://<owner>.github.io/<repository>/qvc-fukushima.json` の実際のURLを検証してからUnityの固定URLへ登録。
+5. 確認済みURL `https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json` をUnityの固定URLへ登録。
 6. VRChatで取得、有効期限、出演者専用表示、番組表のオレンジ照合を確認。
 
 番組変更の自動コミット方法は[公式checkoutの例](https://github.com/actions/checkout#push-a-commit-using-the-built-in-token)を参照しています。ブランチ保護などでpushできない場合も強制書き換えはせず、そのジョブを失敗させて確認できるようにします。公開データの配信自体は先に成功しており、記録失敗で取り消しません。
 
 公開されるのはレビュー済みの小さな取得プログラムとQVC公式の番組名・日時です。ソースページの画像、ロゴ、映像、購入済みUnity素材は公開しません。
 
-## 未検証の部分
+## 実公開の検証と残る確認
 
-ローカルではテストダブルと一時HTTP接続を使ったテストを実施。親担当による初回GitHubランナーの実行は、依存導入と13テストは成功し、QVCページHTTP200後の遅延コンテナー待機60秒で失敗しました。正常な公式取得・Pagesへの最新データ配信・Unityからの取得はまだ確認できていません。通常ロード・見出しスクロール・120秒待機・安全な失敗診断を追加した修正版を再実行して確認する必要があります。
+[実行41252241855](https://github.com/parukoro/qvc-fukushima-feed/actions/runs/41252241855) で、GitHub上の18テスト、実QVCページから11件の抽出、Pages配置、番組変更記録がすべて成功しました。公開JSONはHTTP200・1762 bytes。取得時刻は2026年11月1日08:23:57 JST、有効期限は同日10:23:57 JSTです。この時点の成功記録であり、現在の有効性を保証するものではありません。
 
-2回目も公式ページとh1は正常ですが、出演コンテナー0件・対象API通信0件でタイムアウトしました。現在はheadless-shellから通常のフルChromium＋Xvfbのheadedモードへ切り替え、公開スクリプトの読込状態とエラー分類を追加した版です。User-Agentやwebdriverの変更、ステルスプラグイン、CAPTCHA解決は行いません。実際の成功は次のGitHub実行で確認します。[Playwright公式のheaded CI手順](https://playwright.dev/docs/ci#running-headed)
+初回と2回目は遅延DOMの待機で失敗しましたが、通常のフルChromium＋Xvfbのheadedモードで成功しました。偽UA、webdriverの変更、ステルスプラグイン、CAPTCHA解決は使いません。[Playwright公式のheaded CI手順](https://playwright.dev/docs/ci#running-headed)
+
+親担当がUnityの実ClientSimでVRCStringDownloader受信、次回11月1日19:00の表示、自動取得済み表示を確認しました。ローカルSDK Buildは61,953,682 bytesで成功（アップロードなし）。実データの出演行がオレンジになることを確認しました。VRChat実機の最終確認は未実施です。定期実行が継続するかも今後の運用で確認する必要があります。
+
+状態ページの時刻を日本時間へ変える改善はローカルで準備済みです。JSONのUTC表現は維持します。公開反映はまだ確認していません。
