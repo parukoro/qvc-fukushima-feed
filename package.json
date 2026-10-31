@@ -1,0 +1,14 @@
+{
+  "name": "paru-qvc-guest-feed",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "scrape": "node scraper.mjs",
+    "export": "node export-static.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": { "playwright": "1.64.1" }
+}

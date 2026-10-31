@@ -1,0 +1,87 @@
+name: Refresh official QVC Fukushima appearances
+
+on:
+  schedule:
+    # UTC every 30 minutes, away from the crowded start of the hour.
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+# Read-only by default; only record-facts can write genuine programme changes.
+permissions:
+  contents: read
+
+concurrency:
+  group: qvc-guest-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      programme_facts: ${{ steps.facts.outputs.facts }}
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6 verified 2026-11-01
+        with:
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6 verified 2026-11-01
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install pinned dependencies without package scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check extraction and expiry handling
+        run: npm test
+      - name: Install Chromium headless shell on this temporary runner
+        run: npx --no-install playwright install --with-deps chromium --only-shell
+      - name: Export fresh official guest-only data
+        run: npm run export
+      - name: Prepare canonical programme facts without refresh timestamps
+        id: facts
+        run: node record-facts.mjs --output-for-actions
+      - name: Upload only generated public files
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4 verified 2026-11-01
+        with:
+          path: public
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy fresh artifact to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4 verified 2026-11-01
+
+  record-facts:
+    needs: [build, deploy]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout current default branch for factual change record
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6 verified 2026-11-01
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: true
+      - name: Set up Node 22 without dependency installation
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6 verified 2026-11-01
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Commit only a genuine programme-list change
+        env:
+          QVC_FACTS_JSON: ${{ needs.build.outputs.programme_facts }}
+          QVC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node record-facts.mjs --commit-changed-facts
