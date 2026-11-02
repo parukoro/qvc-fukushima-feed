@@ -2,7 +2,7 @@ import { mkdir, writeFile, rename } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateSavedFeed, responseFor } from './feed.mjs';
-import { fetchDailyGuides, dailyDates, validateDailyFeed } from './daily.mjs';
+import { fetchDailyGuides, makeWeeklyFeed, validateWeeklyFeed } from './daily.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const escapeHtml = text => String(text).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -32,7 +32,8 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
   const daily = includeDaily ? await scrapeDaily({clock}) : [];
   const feed = await acquire();
   const now = clock();
-  if (includeDaily && (daily.length !== 8 || daily.some((item,i) => item.date !== dailyDates(now)[i] || !validateDailyFeed(item,now)))) throw new Error('Refusing incomplete, stale, or invalid eight-day guide');
+  const weekly=includeDaily ? makeWeeklyFeed(daily,now) : null;
+  if (weekly && !validateWeeklyFeed(weekly,now)) throw new Error('Refusing invalid weekly guide');
   // Static hosting cannot change HTTP200 into 503 after expiry. Clients MUST
   // validate expiresUtc themselves. Failed refreshes leave the old deployment.
   if (!validateSavedFeed(feed) || responseFor(feed, now).body.status !== 'fresh' || now - Date.parse(feed.retrievedUtc) > 120_000) {
@@ -48,6 +49,8 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
       await writeFile(target+'.tmp',JSON.stringify(item,null,2)+'\n','utf8');
       await rename(target+'.tmp',target);
     }
+    await writeFile(join(outputDir,'weekly.json.tmp'),JSON.stringify(weekly,null,2)+'\n','utf8');
+    await rename(join(outputDir,'weekly.json.tmp'),join(outputDir,'weekly.json'));
   }
   // Both files are fully written before either public pathname is replaced.
   // Pages deploys a complete artifact only after this process succeeds.

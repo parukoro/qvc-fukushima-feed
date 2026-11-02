@@ -73,6 +73,23 @@ export function validateDailyFeed(feed,now=Date.now()) {
     validateRows(feed.programmes,feed.date); return true;
   } catch { return false; }
 }
+export const WEEKLY_SOURCE = 'https://qvc.jp/content/programguide.html';
+export function makeWeeklyFeed(days,now=Date.now()) {
+  const expected=dailyDates(now);
+  if (!Array.isArray(days) || days.length!==8 || days.some((day,i)=>day.date!==expected[i] || !validateDailyFeed(day,now) || Date.parse(day.retrievedUtc)>now)) throw new Error('Weekly guide needs eight fresh consecutive JST dates');
+  const expiry=Math.min(...days.map(day=>Date.parse(day.expiresUtc)));
+  if (expiry<=now || expiry>now+MAX_AGE_MS) throw new Error('Invalid weekly minimum expiry');
+  return {schemaVersion:1,channel:'QVC',source:WEEKLY_SOURCE,startDate:expected[0],retrievedUtc:new Date(now).toISOString(),expiresUtc:new Date(expiry).toISOString(),status:'fresh',days};
+}
+export function validateWeeklyFeed(feed,now=Date.now()) {
+  try {
+    if (feed.schemaVersion!==1 || feed.channel!=='QVC' || feed.source!==WEEKLY_SOURCE || feed.status!=='fresh' || feed.startDate!==dailyDates(now)[0]) return false;
+    const retrieved=Date.parse(feed.retrievedUtc), expiry=Date.parse(feed.expiresUtc);
+    if (!Number.isFinite(retrieved) || retrieved>now || now-retrieved>120_000 || expiry<=now || expiry>retrieved+MAX_AGE_MS) return false;
+    const checked=makeWeeklyFeed(feed.days,now);
+    return checked.expiresUtc===feed.expiresUtc && feed.days.every(day=>Date.parse(day.retrievedUtc)<=retrieved);
+  } catch { return false; }
+}
 export async function fetchDailyGuides({fetchImpl=fetch,clock=Date.now}={}) {
   const dates = dailyDates(clock()), result = [];
   for (const date of dates) {

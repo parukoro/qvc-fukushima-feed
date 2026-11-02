@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import {dailyDates,dailySource,parseDailyHtml,makeDailyFeed,validateDailyFeed,fetchDailyGuides} from '../daily.mjs';
+import {dailyDates,dailySource,parseDailyHtml,makeDailyFeed,validateDailyFeed,fetchDailyGuides,makeWeeklyFeed,validateWeeklyFeed,WEEKLY_SOURCE} from '../daily.mjs';
 const NOW=Date.parse('2026-11-02T08:00:00+09:00');
 const fixture=date=>`<ul data-channelcode="QVC"><li data-starttime="${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}T00:00:00+09:00" data-endtime="${new Date(Date.parse(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}T00:00:00Z`)+86400000).toISOString().slice(0,10)}T00:00:00+09:00" data-showname="番組 &amp; 特集"></li></ul>`;
 test('daily dates use JST, include today through +7, and validate calendar',()=>{
@@ -41,4 +41,25 @@ test('real saved official HTML contains complete QVC 24-hour schedule',async(t)=
  // fixture, so this check is exercised locally without publishing full HTML.
  let html;try{html=await readFile(new URL('../../QvcResearch/nov01-guide.html',import.meta.url),'utf8');}catch{t.skip('Public reference HTML intentionally not published');return;}
  const rows=parseDailyHtml(html,'20261101');assert.equal(rows.length,20);assert.equal(rows.at(-1).end,'2026-11-02T00:00:00+09:00');
+});
+
+test('weekly retrieval follows every day and expires with oldest day without extending facts',()=>{
+ const days=dailyDates(NOW).map((date,i)=>makeDailyFeed(parseDailyHtml(fixture(date),date),date,NOW+i*1000));
+ const at=NOW+15000,weekly=makeWeeklyFeed(days,at);
+ assert.equal(weekly.retrievedUtc,new Date(at).toISOString());assert.equal(weekly.expiresUtc,days[0].expiresUtc);
+ assert.equal(weekly.source,WEEKLY_SOURCE);assert.equal(weekly.startDate,'20261102');assert.equal(weekly.days.length,8);
+ assert.equal(validateWeeklyFeed(weekly,at),true);assert.ok(Date.parse(weekly.expiresUtc)-at<7200000);
+ assert.equal(validateWeeklyFeed({...weekly,retrievedUtc:new Date(NOW).toISOString()},at),false);
+ for(const change of [{schemaVersion:2},{channel:'QVC2'},{source:'https://example.com'},{status:'stale'},{startDate:'20261103'},{expiresUtc:days[7].expiresUtc},{expiresUtc:new Date(at+86400000).toISOString()},{days:days.slice(1)},{days:[days[0],days[0],...days.slice(2)]},{days:[...days].reverse()}]) assert.equal(validateWeeklyFeed({...weekly,...change},at),false);
+ assert.throws(()=>makeWeeklyFeed(days.slice(0,7),at));assert.throws(()=>makeWeeklyFeed(days,NOW));
+ assert.throws(()=>makeWeeklyFeed(days,at+7200000));
+});
+
+test('weekly rejects old JST startDate at midnight and broken daily schema',()=>{
+ const before=Date.parse('2026-12-31T23:59:30+09:00');
+ const days=dailyDates(before).map(date=>makeDailyFeed(parseDailyHtml(fixture(date),date),date,before));
+ const weekly=makeWeeklyFeed(days,before);
+ assert.equal(validateWeeklyFeed(weekly,before+31000),false);
+ assert.throws(()=>makeWeeklyFeed(days,before+31000));
+ assert.throws(()=>makeWeeklyFeed(days.map((day,i)=>i===3?{...day,programmes:[]}:day),before));
 });
