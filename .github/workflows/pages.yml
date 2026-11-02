@@ -37,7 +37,7 @@ jobs:
         run: npm test
       - name: Install ordinary full Chromium
         run: npx --no-install playwright install --with-deps chromium --no-shell
-      - name: Export fresh official guest-only data
+      - name: Export fresh official guest and eight-day QVC guides
         env:
           QVC_FEED_BROWSER_MODE: headed
         run: xvfb-run -a npm run export

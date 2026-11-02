@@ -1,5 +1,7 @@
 # 福島豊さんの公式出演予定 → VRChat向けGET配信
 
+2026-11-02追加: 公式の日別24時間番組表もJST当日〜7日後まで同じPagesホストへ配信する実装を準備しました。形式・検証・Unity接続手順は [DAILY_GUIDE.md](DAILY_GUIDE.md) を参照してください。guest JSONは既存形式を維持し、X取得は追加しません。新しい日別配信の公開・Unity受信は親担当の確認待ちです。
+
 QVC公式ゲストページの公開出演予定を、VRChatから取得できるJSONに変換する小さなサービスです。GitHub Pages用の30分更新設定と、ローカルHTTP用の起動方法を同梱しています。配信状態はGitHub Actionsと公開ページの取得時刻で確認してください。
 
 常駐サーバーを使わずGitHub Actionsが約30分ごとに取得してPagesへJSONを置く構成です。公開条件と制限は [GITHUB_PAGES.md](GITHUB_PAGES.md)、workflowは `.github/workflows/pages.yml` です。以下の `npm start` は従来の常駐サービス案です。

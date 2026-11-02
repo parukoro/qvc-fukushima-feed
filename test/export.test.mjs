@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname, basename, resolve } from 'node:path';
 import { makeFeed, MAX_AGE_MS } from '../feed.mjs';
 import { exportStatic, renderStatus } from '../export-static.mjs';
+import { dailyDates, makeDailyFeed } from '../daily.mjs';
 
 const NOW = Date.parse('2026-11-01T02:00:00+09:00');
 const feed = makeFeed([{ href:'https://qvc.jp/content/programguide.qvc.202611011900.html', title:'公式番組 <script> & 特集' }], NOW);
@@ -38,4 +39,24 @@ test('status escapes supplied programme text and does not embed executable sourc
   const html = renderStatus({ ...feed, programmes: [{ start: '2026-11-01T19:00:00+09:00', title: '<img src=x onerror=alert(1)>' }] });
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(html, /<img src=x/);
+});
+
+test('eight daily files preserve guest schema and refuse partial feeds before writing', async () => {
+  const dir=await mkdtemp(join(tmpdir(),'qvc-export-'));
+  const daily=dailyDates(NOW).map(date=>{
+    const day=`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
+    const next=new Date(Date.parse(day+'T00:00:00Z')+86400000).toISOString().slice(0,10);
+    return makeDailyFeed([{start:day+'T00:00:00+09:00',end:next+'T00:00:00+09:00',title:'公式番組'}],date,NOW);
+  });
+  try{
+    await exportStatic({outputDir:dir,scrape:async()=>feed,clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily});
+    assert.equal((await readdir(join(dir,'daily'))).length,8);
+    assert.deepEqual(JSON.parse(await readFile(join(dir,'qvc-fukushima.json'),'utf8')),feed);
+    assert.deepEqual(JSON.parse(await readFile(join(dir,'daily','20261101.json'),'utf8')),daily[0]);
+    const before=await readFile(join(dir,'qvc-fukushima.json'),'utf8');
+    await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>feed,clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily.slice(0,7)}));
+    assert.equal(await readFile(join(dir,'qvc-fukushima.json'),'utf8'),before);
+  }finally{
+    assert.equal(resolve(dirname(dir)),resolve(tmpdir()));assert.ok(basename(dir).startsWith('qvc-export-'));await rm(dir,{recursive:true,force:true});
+  }
 });

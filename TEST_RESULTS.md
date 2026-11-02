@@ -1,5 +1,7 @@
 # 2026-11-01 検証結果
 
+2026-11-02追記: 日別8日JSONを加えた統合テストは **25 tests / 25 pass / 0 fail**。公式の11/02〜11/09の8ページを順次実GETし、全日24時間連続・20〜21行の抽出を確認しました。新しい日別版の公開・Unity接続は未実施です。[詳細](DAILY_GUIDE.md)
+
 ## 実公開と公式データ取得
 
 [GitHub Actions 実行41252241855](https://github.com/parukoro/qvc-fukushima-feed/actions/runs/41252241855) でbuild、deploy、record-factsがすべて成功しました。通常のフルChromium＋XvfbのheadedモードでQVC公式ページの遅延DOMから11件を取得しました。

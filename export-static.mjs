@@ -2,6 +2,7 @@ import { mkdir, writeFile, rename } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateSavedFeed, responseFor } from './feed.mjs';
+import { fetchDailyGuides, dailyDates, validateDailyFeed } from './daily.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const escapeHtml = text => String(text).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -24,10 +25,14 @@ export function renderStatus(feed) {
 </html>\n`;
 }
 
-export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, clock = Date.now } = {}) {
+export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, clock = Date.now, includeDaily = false, scrapeDaily = fetchDailyGuides } = {}) {
   const acquire = scrape ?? (async () => { const { scrapeOfficialGuest } = await import('./scraper.mjs'); return scrapeOfficialGuest({browserMode:process.env.QVC_FEED_BROWSER_MODE??'headless'}); });
+  // Collect the small sequential HTTP guides before launching Chromium, so a
+  // guide error does not replace the existing successful guest deployment.
+  const daily = includeDaily ? await scrapeDaily({clock}) : [];
   const feed = await acquire();
   const now = clock();
+  if (includeDaily && (daily.length !== 8 || daily.some((item,i) => item.date !== dailyDates(now)[i] || !validateDailyFeed(item,now)))) throw new Error('Refusing incomplete, stale, or invalid eight-day guide');
   // Static hosting cannot change HTTP200 into 503 after expiry. Clients MUST
   // validate expiresUtc themselves. Failed refreshes leave the old deployment.
   if (!validateSavedFeed(feed) || responseFor(feed, now).body.status !== 'fresh' || now - Date.parse(feed.retrievedUtc) > 120_000) {
@@ -36,6 +41,14 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
   const json = JSON.stringify(feed, null, 2) + '\n';
   const html = renderStatus(feed);
   await mkdir(outputDir, { recursive: true });
+  if (includeDaily) {
+    await mkdir(join(outputDir,'daily'),{recursive:true});
+    for (const item of daily) {
+      const target = join(outputDir,'daily',item.date+'.json');
+      await writeFile(target+'.tmp',JSON.stringify(item,null,2)+'\n','utf8');
+      await rename(target+'.tmp',target);
+    }
+  }
   // Both files are fully written before either public pathname is replaced.
   // Pages deploys a complete artifact only after this process succeeds.
   await writeFile(join(outputDir, 'qvc-fukushima.json.tmp'), json, 'utf8');
@@ -43,9 +56,9 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
   await rename(join(outputDir, 'qvc-fukushima.json.tmp'), join(outputDir, 'qvc-fukushima.json'));
   await rename(join(outputDir, 'index.html.tmp'), join(outputDir, 'index.html'));
   await writeFile(join(outputDir, '.nojekyll'), '', 'utf8');
-  return { programmeCount: feed.programmes.length, retrievedUtc: feed.retrievedUtc, expiresUtc: feed.expiresUtc };
+  return { programmeCount: feed.programmes.length, dailyCount: daily.length, retrievedUtc: feed.retrievedUtc, expiresUtc: feed.expiresUtc };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  exportStatic().then(result => { console.log(JSON.stringify(result)); }).catch(error => { console.error(error.message); process.exitCode = 1; });
+  exportStatic({includeDaily:true}).then(result => { console.log(JSON.stringify(result)); }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }

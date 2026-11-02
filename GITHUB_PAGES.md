@@ -1,5 +1,7 @@
 # 公開済み無料配信：GitHub Pages + GitHub Actions
 
+2026-11-02の日別番組表拡張は [DAILY_GUIDE.md](DAILY_GUIDE.md) に記載しています。既存のguest feedに加えて `daily/YYYYMMDD.json` を8日分出力します。同じ公開先・権限・標準ランナーを使用し、追加依存や有料サービスはありません。新しい版の実GitHub配信は親担当の確認待ちです。
+
 公開先 [parukoro/qvc-fukushima-feed](https://github.com/parukoro/qvc-fukushima-feed) と約30分ごとのPages配信はユーザー承認のもと親担当が公開しました。[JSON](https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json) と [取得状態ページ](https://parukoro.github.io/qvc-fukushima-feed/) が利用できます。この担当はローカル構成の更新のみ行っています。
 
 ## 構成
