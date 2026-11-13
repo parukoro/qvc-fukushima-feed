@@ -2,8 +2,9 @@ name: Refresh official QVC Fukushima appearances
 
 on:
   schedule:
-    # UTC every 30 minutes, away from the crowded start of the hour.
-    - cron: '7,37 * * * *'
+    # Once a day at 20:43 UTC (05:43 JST), away from the crowded start of the hour.
+    # Clients keep using the data for 36 hours, which covers GitHub's delayed or skipped schedules.
+    - cron: '43 20 * * *'
   workflow_dispatch:
 
 # Read-only by default; only record-facts can write genuine programme changes.

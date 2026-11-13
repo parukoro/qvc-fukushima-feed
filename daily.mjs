@@ -76,7 +76,8 @@ export function validateDailyFeed(feed,now=Date.now()) {
 export const WEEKLY_SOURCE = 'https://qvc.jp/content/programguide.html';
 export function makeWeeklyFeed(days,now=Date.now()) {
   const expected=dailyDates(now);
-  if (!Array.isArray(days) || days.length!==8 || days.some((day,i)=>day.date!==expected[i] || !validateDailyFeed(day,now) || Date.parse(day.retrievedUtc)>now)) throw new Error('Weekly guide needs eight fresh consecutive JST dates');
+  // Today must be present; later days may be missing when the official site has not published them yet.
+  if (!Array.isArray(days) || days.length<1 || days.length>8 || days.some((day,i)=>day.date!==expected[i] || !validateDailyFeed(day,now) || Date.parse(day.retrievedUtc)>now)) throw new Error('Weekly guide needs fresh consecutive JST dates starting today');
   const expiry=Math.min(...days.map(day=>Date.parse(day.expiresUtc)));
   if (expiry<=now || expiry>now+MAX_AGE_MS) throw new Error('Invalid weekly minimum expiry');
   return {schemaVersion:1,channel:'QVC',source:WEEKLY_SOURCE,startDate:expected[0],retrievedUtc:new Date(now).toISOString(),expiresUtc:new Date(expiry).toISOString(),status:'fresh',days};
@@ -93,13 +94,21 @@ export function validateWeeklyFeed(feed,now=Date.now()) {
 export async function fetchDailyGuides({fetchImpl=fetch,clock=Date.now}={}) {
   const dates = dailyDates(clock()), result = [];
   for (const date of dates) {
-    const response = await fetchImpl(dailySource(date),{redirect:'error',signal:AbortSignal.timeout(30_000),headers:{Accept:'text/html'}});
-    if (!response.ok) throw new Error(`Official daily guide HTTP ${response.status}`);
-    const bytes = [];
-    let size = 0;
-    for await (const chunk of response.body) { size += chunk.length; if (size > 2_000_000) throw new Error('Daily response too large'); bytes.push(chunk); }
-    const html = Buffer.concat(bytes).toString('utf8');
-    result.push(makeDailyFeed(parseDailyHtml(html,date),date,clock()));
+    try {
+      const response = await fetchImpl(dailySource(date),{redirect:'error',signal:AbortSignal.timeout(30_000),headers:{Accept:'text/html'}});
+      if (!response.ok) throw new Error(`Official daily guide HTTP ${response.status}`);
+      const bytes = [];
+      let size = 0;
+      for await (const chunk of response.body) { size += chunk.length; if (size > 2_000_000) throw new Error('Daily response too large'); bytes.push(chunk); }
+      const html = Buffer.concat(bytes).toString('utf8');
+      result.push(makeDailyFeed(parseDailyHtml(html,date),date,clock()));
+    } catch (error) {
+      // Today is required. A later day that is not published (or not complete) yet ends the run of
+      // consecutive days instead of discarding the whole week.
+      if (result.length === 0) throw error;
+      console.warn(`Daily guide ${date} skipped: ${error.message}`);
+      break;
+    }
   }
   // A date rollover during collection must not silently export yesterday's set.
   if (JSON.stringify(dates) !== JSON.stringify(dailyDates(clock()))) throw new Error('JST date changed during collection; retry next run');

@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 
 export const SOURCE_URL = 'https://qvc.jp/information/feature/guest/guestpedia/1320.html';
 export const GUEST = Object.freeze({ id: '1320', name: '福島豊' });
-export const REFRESH_MS = 15 * 60 * 1000;
-export const MAX_AGE_MS = 2 * 60 * 60 * 1000;
+// Published once a day; data stays usable until the next run plus slack for GitHub schedule delays.
+export const REFRESH_MS = 24 * 60 * 60 * 1000;
+export const MAX_AGE_MS = 36 * 60 * 60 * 1000;
 
 export function programmeStart(href) {
   let url;

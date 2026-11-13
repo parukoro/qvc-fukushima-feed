@@ -16,7 +16,7 @@ export function renderStatus(feed) {
 <style>body{font:16px/1.7 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 20px;color:#17242b;background:#f7f9fa}time{font-weight:600}li{padding:10px 0}a{color:#005e83}.stale{color:#9d260c}</style>
 <h1>福島豊さんの出演予定</h1>
 <p>QVC公式ページに掲載された予定の個人用ミラーです。QVCとは関係のない非公式の表示で、予定は変更される場合があります。</p>
-<p id="freshness" data-expiry="${escapeHtml(feed.expiresUtc)}">取得成功 / 自動更新予定は約30分ごと</p>
+<p id="freshness" data-expiry="${escapeHtml(feed.expiresUtc)}">取得成功 / 自動更新は1日1回（日本時間5時台）</p>
 <p>取得: <time datetime="${escapeHtml(feed.retrievedUtc)}">${escapeHtml(displayJst(feed.retrievedUtc))}</time><br>有効期限: <time datetime="${escapeHtml(feed.expiresUtc)}">${escapeHtml(displayJst(feed.expiresUtc))}</time></p>
 <p><a href="${escapeHtml(feed.source)}">QVC公式の最新情報</a> / <a href="qvc-fukushima.json">VRChat用JSON</a></p>
 <ul>${rows}</ul>
@@ -30,10 +30,13 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
   // Collect the small sequential HTTP guides before launching Chromium, so a
   // guide error does not replace the existing successful guest deployment.
   const daily = includeDaily ? await scrapeDaily({clock}) : [];
+  // Bundle the week as soon as the guides are collected: the guest page below can take up to two
+  // minutes in Chromium, which used to push the guides past their freshness check and fail the run.
+  const collected = clock();
+  const weekly=includeDaily ? makeWeeklyFeed(daily,collected) : null;
+  if (weekly && !validateWeeklyFeed(weekly,collected)) throw new Error('Refusing invalid weekly guide');
   const feed = await acquire();
   const now = clock();
-  const weekly=includeDaily ? makeWeeklyFeed(daily,now) : null;
-  if (weekly && !validateWeeklyFeed(weekly,now)) throw new Error('Refusing invalid weekly guide');
   // Static hosting cannot change HTTP200 into 503 after expiry. Clients MUST
   // validate expiresUtc themselves. Failed refreshes leave the old deployment.
   if (!validateSavedFeed(feed) || responseFor(feed, now).body.status !== 'fresh' || now - Date.parse(feed.retrievedUtc) > 120_000) {
