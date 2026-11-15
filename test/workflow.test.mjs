@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 test('Pages workflow uses scheduled/manual public standard runner and scoped publication', async () => {
   const yaml = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
-  assert.match(yaml, /cron: '7,37 \* \* \* \*'/);
+  assert.match(yaml, /cron: '43 20 \* \* \*'/);
   assert.match(yaml, /workflow_dispatch:/);
   assert.match(yaml, /node-version: '22'/);
   assert.match(yaml, /runs-on: ubuntu-24\.04/g);

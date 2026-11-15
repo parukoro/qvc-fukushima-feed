@@ -35,6 +35,8 @@ test('eight sequential official GETs; no redirects or arbitrary URLs and fail cl
  assert.equal(feeds.length,8);assert.deepEqual(requests,dailyDates(NOW).map(dailySource));
  await assert.rejects(()=>fetchDailyGuides({clock:()=>NOW,fetchImpl:async()=>new Response('failure',{status:503})}));
  await assert.rejects(()=>fetchDailyGuides({clock:()=>NOW,fetchImpl:async()=>new Response('no guide')}));
+ const lastMissing=async(url)=>url.endsWith(dailySource(dailyDates(NOW)[7]).slice(-17))?new Response('not yet',{status:404}):new Response(fixture(/\.(\d{8})0000/.exec(url)[1]));
+ assert.equal((await fetchDailyGuides({clock:()=>NOW,fetchImpl:lastMissing})).length,7);
 });
 test('real saved official HTML contains complete QVC 24-hour schedule',async(t)=>{
  // Public reference fixture lives outside this publishable folder. CI has no
@@ -48,10 +50,10 @@ test('weekly retrieval follows every day and expires with oldest day without ext
  const at=NOW+15000,weekly=makeWeeklyFeed(days,at);
  assert.equal(weekly.retrievedUtc,new Date(at).toISOString());assert.equal(weekly.expiresUtc,days[0].expiresUtc);
  assert.equal(weekly.source,WEEKLY_SOURCE);assert.equal(weekly.startDate,'20261102');assert.equal(weekly.days.length,8);
- assert.equal(validateWeeklyFeed(weekly,at),true);assert.ok(Date.parse(weekly.expiresUtc)-at<7200000);
+ assert.equal(validateWeeklyFeed(weekly,at),true);assert.ok(Date.parse(weekly.expiresUtc)-at<=36*3600000);
  assert.equal(validateWeeklyFeed({...weekly,retrievedUtc:new Date(NOW).toISOString()},at),false);
  for(const change of [{schemaVersion:2},{channel:'QVC2'},{source:'https://example.com'},{status:'stale'},{startDate:'20261103'},{expiresUtc:days[7].expiresUtc},{expiresUtc:new Date(at+86400000).toISOString()},{days:days.slice(1)},{days:[days[0],days[0],...days.slice(2)]},{days:[...days].reverse()}]) assert.equal(validateWeeklyFeed({...weekly,...change},at),false);
- assert.throws(()=>makeWeeklyFeed(days.slice(0,7),at));assert.throws(()=>makeWeeklyFeed(days,NOW));
+ assert.equal(makeWeeklyFeed(days.slice(0,7),at).days.length,7);assert.throws(()=>makeWeeklyFeed(days.slice(1),at));assert.throws(()=>makeWeeklyFeed([],at));assert.throws(()=>makeWeeklyFeed(days,NOW));
  assert.throws(()=>makeWeeklyFeed(days,at+7200000));
 });
 

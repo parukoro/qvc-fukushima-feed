@@ -18,9 +18,9 @@ test('static export writes only validated fresh data and an escaped status page'
     assert.deepEqual((await readdir(dir)).sort(), ['.nojekyll', 'index.html', 'qvc-fukushima.json']);
     assert.deepEqual(JSON.parse(await readFile(join(dir, 'qvc-fukushima.json'), 'utf8')), feed);
     const html = await readFile(join(dir, 'index.html'), 'utf8');
-    assert.match(html, /data-expiry="2026-10-31T19:00:00.000Z"/);
+    assert.match(html, /data-expiry="2026-11-02T05:00:00.000Z"/);
     assert.match(html, /datetime="2026-10-31T17:00:00.000Z">2026-11-01 02:00:00 JST（日本時間）/);
-    assert.match(html, /datetime="2026-10-31T19:00:00.000Z">2026-11-01 04:00:00 JST（日本時間）/);
+    assert.match(html, /datetime="2026-11-02T05:00:00.000Z">2026-11-02 14:00:00 JST（日本時間）/);
     assert.match(html, /公式番組 &amp; 特集/);
     assert.match(html, /情報期限切れ/);
     const before = await readFile(join(dir, 'qvc-fukushima.json'), 'utf8');
@@ -56,7 +56,7 @@ test('eight daily files preserve guest schema and refuse partial feeds before wr
     const weeklyText=await readFile(join(dir,'weekly.json'),'utf8');
     const weekly=JSON.parse(weeklyText);assert.equal(validateWeeklyFeed(weekly,NOW),true);assert.deepEqual(weekly.days,daily);
     const before=await readFile(join(dir,'qvc-fukushima.json'),'utf8');
-    await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>feed,clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily.slice(0,7)}));
+    await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>feed,clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily.slice(1)}));
     assert.equal(await readFile(join(dir,'qvc-fukushima.json'),'utf8'),before);
     assert.equal(await readFile(join(dir,'weekly.json'),'utf8'),weeklyText);
     await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>{throw new Error('Guest failed');},clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily}));

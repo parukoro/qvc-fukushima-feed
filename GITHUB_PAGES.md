@@ -2,7 +2,7 @@
 
 2026-11-02の日別番組表拡張は [DAILY_GUIDE.md](DAILY_GUIDE.md) に記載しています。既存のguest feedに加えて `daily/YYYYMMDD.json` を8日分出力します。同じ公開先・権限・標準ランナーを使用し、追加依存や有料サービスはありません。新しい版の実GitHub配信は親担当の確認待ちです。
 
-公開先 [parukoro/qvc-fukushima-feed](https://github.com/parukoro/qvc-fukushima-feed) と約30分ごとのPages配信はユーザー承認のもと親担当が公開しました。[JSON](https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json) と [取得状態ページ](https://parukoro.github.io/qvc-fukushima-feed/) が利用できます。この担当はローカル構成の更新のみ行っています。
+公開先 [parukoro/qvc-fukushima-feed](https://github.com/parukoro/qvc-fukushima-feed) と1日1回のPages配信はユーザー承認のもと親担当が公開しました。[JSON](https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json) と [取得状態ページ](https://parukoro.github.io/qvc-fukushima-feed/) が利用できます。この担当はローカル構成の更新のみ行っています。
 
 ## 構成
 
@@ -27,7 +27,7 @@
 - GitHub Freeでは公開リポジトリのPagesが利用できます。[GitHub公式説明](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)
 - 公開リポジトリの標準GitHubホストランナーの実行は無料です。大型ランナーやprivateリポジトリへ切り替えると条件が変わります。[Actions料金の公式説明](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
 - この案は大型ランナー・有料サービスを選択しません。artifactは小さい生成物のみ、保持1日、Actionsの依存キャッシュも使いません。実行権限や組織ポリシーによって利用できない場合があります。
-- スケジュールは約30分ごとを目指すもので、正確な更新保証はありません。GitHubの混雑で遅延し、ジョブが落とされる場合もあります。既定ブランチ上のworkflowだけが定期実行されます。[スケジュールの公式仕様](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+- スケジュールは1日1回（20:43 UTC＝日本時間5:43）で、正確な更新保証はありません。GitHubの混雑で遅延し、ジョブが落とされる場合もあります。既定ブランチ上のworkflowだけが定期実行されます。[スケジュールの公式仕様](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 - 配置後も配信キャッシュとVRChat側の再取得間隔によって反映が遅れます。即時の生配信データではありません。
 - 公開リポジトリは60日間リポジトリの活動がないと定期workflowが自動無効化されます。長期放置の完全無保守運用には向きません。必要に応じてGitHub上で再有効化し、手動実行で更新を確認する運用が必要です。同じ公式仕様に記載されています。
 - 実際の番組変更をリポジトリにも残すことで通常の活動を継続する構成ですが、上記公式資料はbotコミットが無活動判定にどう数えられるかまで明示していません。自動停止を確実に防げる保証はしません。番組変更が60日以上ない場合、記録の権限が制限された場合、GitHubの仕様変更時にも手動点検が必要です。

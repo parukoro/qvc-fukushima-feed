@@ -2,9 +2,9 @@
 
 2026-11-02追加: 公式の日別24時間番組表もJST当日〜7日後まで同じPagesホストへ配信する実装を準備しました。形式・検証・Unity接続手順は [DAILY_GUIDE.md](DAILY_GUIDE.md) を参照してください。guest JSONは既存形式を維持し、X取得は追加しません。新しい日別配信の公開・Unity受信は親担当の確認待ちです。
 
-QVC公式ゲストページの公開出演予定を、VRChatから取得できるJSONに変換する小さなサービスです。GitHub Pages用の30分更新設定と、ローカルHTTP用の起動方法を同梱しています。配信状態はGitHub Actionsと公開ページの取得時刻で確認してください。
+QVC公式ゲストページの公開出演予定を、VRChatから取得できるJSONに変換する小さなサービスです。GitHub Pages用の1日1回の更新設定と、ローカルHTTP用の起動方法を同梱しています。配信状態はGitHub Actionsと公開ページの取得時刻で確認してください。
 
-常駐サーバーを使わずGitHub Actionsが約30分ごとに取得してPagesへJSONを置く構成です。公開条件と制限は [GITHUB_PAGES.md](GITHUB_PAGES.md)、workflowは `.github/workflows/pages.yml` です。以下の `npm start` は従来の常駐サービス案です。
+常駐サーバーを使わずGitHub Actionsが1日1回（日本時間5時台）取得してPagesへJSONを置く構成です。公開条件と制限は [GITHUB_PAGES.md](GITHUB_PAGES.md)、workflowは `.github/workflows/pages.yml` です。以下の `npm start` は従来の常駐サービス案です。
 
 ## 動作
 
@@ -39,7 +39,7 @@ npm start
 
 ## 公開済み配信とワールド接続
 
-[公開JSON](https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json) と [取得状態ページ](https://parukoro.github.io/qvc-fukushima-feed/) をGitHub Pagesで公開済みです。GitHub Actionsが約30分ごとに通常のフルChromium＋XvfbでQVC公式ページを読み、出演予定を更新します。常駐サーバーは不要です。
+[公開JSON](https://parukoro.github.io/qvc-fukushima-feed/qvc-fukushima.json) と [取得状態ページ](https://parukoro.github.io/qvc-fukushima-feed/) をGitHub Pagesで公開済みです。GitHub Actionsが1日1回（日本時間5時台）通常のフルChromium＋XvfbでQVC公式ページを読み、出演予定を更新します。常駐サーバーは不要です。
 
 初回の成功実行は [41252241855](https://github.com/parukoro/qvc-fukushima-feed/actions/runs/41252241855)。build・deploy・番組変更記録が成功し、公開JSONのHTTP200、1762 bytes、11件の出演予定を確認しました。取得は2026年11月1日08:23:57 JST、有効期限は同日10:23:57 JSTです。これはその実行時の証跡であり、現在の鮮度は公開JSONで確認してください。
 
@@ -57,7 +57,7 @@ npm start
   "source": "https://qvc.jp/information/feature/guest/guestpedia/1320.html",
   "retrievedUtc": "2026-10-31T17:00:00.000Z",
   "refreshAfterUtc": "2026-10-31T17:15:00.000Z",
-  "expiresUtc": "2026-10-31T19:00:00.000Z",
+  "expiresUtc": "2026-11-02T05:00:00.000Z",
   "status": "fresh",
   "programmes": [
     {"start": "2026-11-01T19:00:00+09:00", "title": "番組名"}
