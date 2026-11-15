@@ -59,8 +59,13 @@ test('eight daily files preserve guest schema and refuse partial feeds before wr
     await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>feed,clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily.slice(1)}));
     assert.equal(await readFile(join(dir,'qvc-fukushima.json'),'utf8'),before);
     assert.equal(await readFile(join(dir,'weekly.json'),'utf8'),weeklyText);
-    await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>{throw new Error('Guest failed');},clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily}));
+    // A guest failure still publishes the guides and drops the earlier guest feed.
+    const partial=await exportStatic({outputDir:dir,scrape:async()=>{throw new Error('Guest failed');},clock:()=>NOW,includeDaily:true,scrapeDaily:async()=>daily});
+    assert.equal(partial.guestError,'Guest failed');
     assert.equal(await readFile(join(dir,'weekly.json'),'utf8'),weeklyText);
+    assert.ok(!(await readdir(dir)).includes('qvc-fukushima.json'));
+    assert.match(await readFile(join(dir,'index.html'),'utf8'),/出演予定を取得できませんでした（Guest failed）/);
+    await assert.rejects(()=>exportStatic({outputDir:dir,scrape:async()=>{throw new Error('Guest failed');},clock:()=>NOW}));
   }finally{
     assert.equal(resolve(dirname(dir)),resolve(tmpdir()));assert.ok(basename(dir).startsWith('qvc-export-'));await rm(dir,{recursive:true,force:true});
   }
