@@ -44,6 +44,8 @@ jobs:
         run: xvfb-run -a npm run export
       - name: Prepare canonical programme facts without refresh timestamps
         id: facts
+        # Skipped when this run published the guides without a guest feed.
+        if: hashFiles('public/qvc-fukushima.json') != ''
         run: node record-facts.mjs --output-for-actions
       - name: Upload only generated public files
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4 verified 2026-11-01
@@ -68,6 +70,7 @@ jobs:
 
   record-facts:
     needs: [build, deploy]
+    if: needs.build.outputs.programme_facts != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

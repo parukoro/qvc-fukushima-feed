@@ -1,4 +1,4 @@
-import { mkdir, writeFile, rename } from 'node:fs/promises';
+import { mkdir, writeFile, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateSavedFeed, responseFor } from './feed.mjs';
@@ -25,6 +25,19 @@ export function renderStatus(feed) {
 </html>\n`;
 }
 
+// Shown when the guide was published but the guest page could not be read this run.
+export function renderGuestUnavailable(reason, now) {
+  return `<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>福島豊さんの公式出演予定・取得状態</title>
+<style>body{font:16px/1.7 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 20px;color:#17242b;background:#f7f9fa}.stale{color:#9d260c}a{color:#005e83}</style>
+<h1>福島豊さんの出演予定</h1>
+<p class="stale">今回の実行では出演予定を取得できませんでした（${escapeHtml(reason)}）。番組表（weekly.json）は更新済みです。</p>
+<p>実行: <time datetime="${escapeHtml(new Date(now).toISOString())}">${escapeHtml(displayJst(new Date(now).toISOString()))}</time></p>
+<p><a href="https://qvc.jp/">QVC公式の最新情報</a></p>
+</html>\n`;
+}
+
 export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, clock = Date.now, includeDaily = false, scrapeDaily = fetchDailyGuides } = {}) {
   const acquire = scrape ?? (async () => { const { scrapeOfficialGuest } = await import('./scraper.mjs'); return scrapeOfficialGuest({browserMode:process.env.QVC_FEED_BROWSER_MODE??'headless'}); });
   // Collect the small sequential HTTP guides before launching Chromium, so a
@@ -35,15 +48,23 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
   const collected = clock();
   const weekly=includeDaily ? makeWeeklyFeed(daily,collected) : null;
   if (weekly && !validateWeeklyFeed(weekly,collected)) throw new Error('Refusing invalid weekly guide');
-  const feed = await acquire();
-  const now = clock();
-  // Static hosting cannot change HTTP200 into 503 after expiry. Clients MUST
-  // validate expiresUtc themselves. Failed refreshes leave the old deployment.
-  if (!validateSavedFeed(feed) || responseFor(feed, now).body.status !== 'fresh' || now - Date.parse(feed.retrievedUtc) > 120_000) {
-    throw new Error('Refusing to export stale, expired, or invalid official data');
+  let feed = null, guestError = null;
+  try {
+    feed = await acquire();
+    const now = clock();
+    // Static hosting cannot change HTTP200 into 503 after expiry. Clients MUST
+    // validate expiresUtc themselves. Failed refreshes leave the old deployment.
+    if (!validateSavedFeed(feed) || responseFor(feed, now).body.status !== 'fresh' || now - Date.parse(feed.retrievedUtc) > 120_000) {
+      throw new Error('Refusing to export stale, expired, or invalid official data');
+    }
+  } catch (error) {
+    // The guest page depends on a third-party script that GitHub's runners are sometimes refused.
+    // With guides in hand, publish them and leave the guest feed out rather than failing the run.
+    if (!includeDaily) throw error;
+    feed = null; guestError = error.message;
   }
-  const json = JSON.stringify(feed, null, 2) + '\n';
-  const html = renderStatus(feed);
+  const json = feed ? JSON.stringify(feed, null, 2) + '\n' : null;
+  const html = feed ? renderStatus(feed) : renderGuestUnavailable(guestError, clock());
   await mkdir(outputDir, { recursive: true });
   if (includeDaily) {
     await mkdir(join(outputDir,'daily'),{recursive:true});
@@ -57,14 +78,19 @@ export async function exportStatic({ outputDir = join(HERE, 'public'), scrape, c
   }
   // Both files are fully written before either public pathname is replaced.
   // Pages deploys a complete artifact only after this process succeeds.
-  await writeFile(join(outputDir, 'qvc-fukushima.json.tmp'), json, 'utf8');
+  if (json) await writeFile(join(outputDir, 'qvc-fukushima.json.tmp'), json, 'utf8');
+  else await rm(join(outputDir, 'qvc-fukushima.json'), { force: true }); // never redeploy an older guest feed
   await writeFile(join(outputDir, 'index.html.tmp'), html, 'utf8');
-  await rename(join(outputDir, 'qvc-fukushima.json.tmp'), join(outputDir, 'qvc-fukushima.json'));
+  if (json) await rename(join(outputDir, 'qvc-fukushima.json.tmp'), join(outputDir, 'qvc-fukushima.json'));
   await rename(join(outputDir, 'index.html.tmp'), join(outputDir, 'index.html'));
   await writeFile(join(outputDir, '.nojekyll'), '', 'utf8');
-  return { programmeCount: feed.programmes.length, dailyCount: daily.length, retrievedUtc: feed.retrievedUtc, expiresUtc: feed.expiresUtc };
+  return { programmeCount: feed ? feed.programmes.length : 0, dailyCount: daily.length, retrievedUtc: feed?.retrievedUtc ?? null, expiresUtc: feed?.expiresUtc ?? null, guestError };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  exportStatic({includeDaily:true}).then(result => { console.log(JSON.stringify(result)); }).catch(error => { console.error(error.message); process.exitCode = 1; });
+  exportStatic({includeDaily:true}).then(result => {
+    console.log(JSON.stringify(result));
+    // Surface the partial result on the run page without failing the guide deployment.
+    if (result.guestError) console.log(`::warning title=Guest feed not published::${result.guestError.replace(/[\r\n%]/g,' ')}`);
+  }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
