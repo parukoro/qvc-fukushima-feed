@@ -1,17 +1,16 @@
 
 const base = new URL('https://qvc.jp/files/information/bookviewer/202611/index.html');
-for (const page of [20,21,22,23]) {
-  const file='data/highlight/'+String(page).padStart(4,'0')+'.txt';
-  const response=await fetch(new URL(file,base),{signal:AbortSignal.timeout(20000)});
-  if (!response.ok) {console.log(JSON.stringify({page,status:response.status}));continue;}
-  const chars=(await response.json()).map(c=>({...c,x:Number(c.x),y:Number(c.y),w:Number(c.width),h:Number(c.height)}));
-  const groups=new Map();
-  for(const c of chars){
-    const y=Math.round(c.y*2)/2;
-    if(!groups.has(y)) groups.set(y,[]);
-    groups.get(y).push(c);
-  }
-  const line = (arr)=>arr.sort((a,b)=>a.x-b.x).map(c=>[c.x.toFixed(1),c.text]).slice(0,30);
-  const labels = [...groups.entries()].map(([y,a])=>[y,a.filter(c=>c.x<35).sort((a,b)=>a.x-b.x).map(c=>c.text).join('')]).filter(([,s])=>s.trim());
-  console.log(JSON.stringify({page, n:chars.length, yMax:Math.max(...chars.map(c=>c.y)), xMax:Math.max(...chars.map(c=>c.x)), headers:[...groups.entries()].filter(([y])=>y>20&&y<58).sort((a,b)=>a[0]-b[0]).slice(0,15).map(([y,a])=>[y,line(a)]), labels:labels.slice(0,38).sort((a,b)=>a[0]-b[0])}));
+const response = await fetch(new URL('data/txtsearch.txt',base),{signal:AbortSignal.timeout(20000)});
+const text=(await response.text()).split('\n');
+console.log(JSON.stringify({name:'candidatePages',data:text.map((line,index)=>[index+1,(line.match(/ワクワク/g)||[]).length,(line.match(/ドキドキ/g)||[]).length]).filter(([,w,d])=>w+d>=4)}));
+for (const page of [22,23]) {
+  const url=new URL('data/highlight/'+String(page).padStart(4,'0')+'.txt',base);
+  const chars=(await (await fetch(url,{signal:AbortSignal.timeout(20000)})).json()).map(c=>({...c,x:Number(c.x),y:Number(c.y),w:Number(c.width),h:Number(c.height)}));
+  const bands=[[46,53],[58,80],[94,121],[122,151],[164,196],[547,570]];
+  const data=bands.map(([lo,hi])=>{const lines=new Map();for(const c of chars.filter(c=>c.y>=lo&&c.y<hi&&c.x<(page===22?130:112))){
+    const y=Math.round(c.y*2)/2;if(!lines.has(y))lines.set(y,[]);lines.get(y).push(c);}
+    return [...lines].sort(([a],[b])=>a-b).map(([y,cs])=>{
+      cs.sort((a,b)=>a.x-b.x);
+      return [y,cs.map(c=>c.text).join(''),cs.slice(0,3).map(c=>[c.x,c.h,c.w])];});});
+  console.log(JSON.stringify({page,data}));
 }
