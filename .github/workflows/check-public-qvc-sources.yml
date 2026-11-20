@@ -1,0 +1,16 @@
+name: Check public QVC source availability
+on:
+  push:
+    branches: [codex/qvc-official-source-check]
+permissions:
+  contents: read
+jobs:
+  sources:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check QVC's linked public sources
+        run: node probe-official-sources.mjs
