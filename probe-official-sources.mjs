@@ -1,17 +1,17 @@
 
-const issue = new URL('https://qvc.jp/files/information/bookviewer/202611/index.html');
-const settings = await (await fetch(new URL('data/book.txt', issue), {signal:AbortSignal.timeout(20000)})).json();
-const relevant = object => Object.fromEntries(Object.entries(object).filter(([k]) => /text|txt|search|copy/i.test(k)));
-console.log(JSON.stringify({name:'settings', fields:relevant(settings), optionText:relevant(settings.options ?? {})}));
-for (const file of ['data/highlight/0022.txt','data/txtcopy/0022.txt']) {
-  const response = await fetch(new URL(file, issue), { signal: AbortSignal.timeout(20000) });
-  if (!response.ok) {
-    console.log(JSON.stringify({file,status:response.status}));
-    continue;
+const base = new URL('https://qvc.jp/files/information/bookviewer/202611/index.html');
+for (const page of [20,21,22,23]) {
+  const file='data/highlight/'+String(page).padStart(4,'0')+'.txt';
+  const response=await fetch(new URL(file,base),{signal:AbortSignal.timeout(20000)});
+  if (!response.ok) {console.log(JSON.stringify({page,status:response.status}));continue;}
+  const chars=(await response.json()).map(c=>({...c,x:Number(c.x),y:Number(c.y),w:Number(c.width),h:Number(c.height)}));
+  const groups=new Map();
+  for(const c of chars){
+    const y=Math.round(c.y*2)/2;
+    if(!groups.has(y)) groups.set(y,[]);
+    groups.get(y).push(c);
   }
-  const data = await response.json();
-  const rows = Array.isArray(data) ? data : Object.values(data);
-  console.log(JSON.stringify({file,status:response.status, entries:rows.length,
-    sample:rows.slice(0,3).map(x=>JSON.stringify(x).slice(0,360)),
-    relevant:rows.filter(value=>/11月|23日|23\(月\)|アイロボット|00:00|サンルミエ/i.test(JSON.stringify(value))).slice(0,6).map(x=>JSON.stringify(x).slice(0,360))}));
+  const line = (arr)=>arr.sort((a,b)=>a.x-b.x).map(c=>[c.x.toFixed(1),c.text]).slice(0,30);
+  const labels = [...groups.entries()].map(([y,a])=>[y,a.filter(c=>c.x<35).sort((a,b)=>a.x-b.x).map(c=>c.text).join('')]).filter(([,s])=>s.trim());
+  console.log(JSON.stringify({page, n:chars.length, yMax:Math.max(...chars.map(c=>c.y)), xMax:Math.max(...chars.map(c=>c.x)), headers:[...groups.entries()].filter(([y])=>y>20&&y<58).sort((a,b)=>a[0]-b[0]).slice(0,15).map(([y,a])=>[y,line(a)]), labels:labels.slice(0,38).sort((a,b)=>a[0]-b[0])}));
 }
