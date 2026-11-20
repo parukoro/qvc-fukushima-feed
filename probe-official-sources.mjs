@@ -44,14 +44,16 @@ export function parseSchedulePage(raw, month) {
   const width = 94.5;
   const columns = Array.from({length:4},(_,i)=>glyphs.filter(g=>g.x>=left+i*width&&g.x<left+(i+1)*width));
   const headings = columns.map(col=>lineText(col.filter(g=>g.y>=47&&g.y<=52&&g.h>=20&&/^\d$/.test(g.text)).sort((a,b)=>a.x-b.x)));
-  const days = headings.map(Number);
-  if (!days.every((d,i)=>Number.isInteger(d)&&d>=1&&d<=31&&(i===0||d===days[0]+i))) {
-    throw new Error('Cannot confirm four consecutive NextQ dates on the schedule page');
+  const days = headings.flatMap((heading,index)=>/^\d{1,2}$/.test(heading)?[{date:Number(heading),index}]:[]);
+  if (days.length<1 || !days.every(({date,index},i)=>date>=1&&date<=31&&
+      (i===0||(date===days[i-1].date+1&&index===days[i-1].index+1)))) {
+    throw new Error('Cannot confirm consecutive NextQ dates: '+JSON.stringify(headings));
   }
 
   const starts = expected.map(hour=>hour===0 ? 61 : hour===2 ? clock.get(1).y+10 : clock.get(hour).y-step*0.61);
-  return columns.map((glyphs,index)=>{
-    const date = month+String(days[index]).padStart(2,'0');
+  return days.map(({date:day,index})=>{
+    const glyphs = columns[index];
+    const date = month+String(day).padStart(2,'0');
     const iso = date.replace(/^(....)(..)(..)$/, '$1-$2-$3');
     if (new Date(iso).toISOString().slice(0,10)!==iso) throw new Error('Invalid NextQ date');
     const rows = starts.map((start,i)=>{
