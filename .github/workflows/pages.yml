@@ -39,7 +39,9 @@ jobs:
       - name: Check extraction and expiry handling
         run: npm test
       - name: Inspect the official HTTP response for today's guide
+        id: guide-http
         if: github.event_name == 'push'
+        continue-on-error: true
         run: |
           node --input-type=module <<'JS'
           import { dailyDates, dailySource, parseDailyHtml } from './daily.mjs';
@@ -76,13 +78,36 @@ jobs:
           JS
       - name: Install ordinary full Chromium
         run: npx --no-install playwright install --with-deps chromium --no-shell
+      - name: Verify the guide in the ordinary Chromium on the same runner
+        if: github.event_name == 'push' && steps.guide-http.outcome == 'failure'
+        run: |
+          xvfb-run -a node --input-type=module <<'JS'
+          import { chromium } from 'playwright';
+          import { dailyDates, dailySource, parseDailyHtml } from './daily.mjs';
+
+          const date = dailyDates()[0];
+          const source = dailySource(date);
+          const browser = await chromium.launch({ channel: 'chromium', headless: false });
+          try {
+            const page = await browser.newPage({ locale: 'ja-JP', timezoneId: 'Asia/Tokyo' });
+            const response = await page.goto(source, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+            const status = response?.status();
+            console.log(JSON.stringify({ date, status, officialUrl: page.url() === source }));
+            if (!response?.ok() || page.url() !== source) throw new Error('Official guide navigation was unsuccessful');
+            const rows = parseDailyHtml(await response.text(), date);
+            console.log(`Ordinary Chromium validated ${rows.length} programmes for ${date}`);
+          } finally {
+            await browser.close();
+          }
+          JS
       - name: Export fresh official guest and eight-day QVC guides
         id: export
+        if: github.event_name != 'push' || steps.guide-http.outcome == 'success'
         env:
           QVC_FEED_BROWSER_MODE: headed
         run: xvfb-run -a npm run export
       - name: Validate generated feeds without deploying
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.export.outcome == 'success'
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
@@ -105,6 +130,11 @@ jobs:
           assert.ok(validateSavedFeed(guest) && responseFor(guest, now).body.status === 'fresh', 'Invalid or expired guest feed');
           console.log(`Validated ${guest.programmes.length} guest appearances, expiring ${guest.expiresUtc}`);
           JS
+      - name: Require the full export for release readiness
+        if: github.event_name == 'push' && steps.export.outcome == 'skipped'
+        run: |
+          echo 'The current production acquisition could not generate both feeds.'
+          exit 1
       - name: Check guest acquisition separately if export failed
         if: failure() && github.event_name == 'push' && steps.export.outcome == 'failure'
         run: |
