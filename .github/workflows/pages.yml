@@ -38,6 +38,42 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check extraction and expiry handling
         run: npm test
+      - name: Inspect the official HTTP response for today's guide
+        if: github.event_name == 'push'
+        run: |
+          node --input-type=module <<'JS'
+          import { dailyDates, dailySource, parseDailyHtml } from './daily.mjs';
+
+          const date = dailyDates()[0];
+          const source = dailySource(date);
+          const response = await fetch(source, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(30_000),
+            headers: { Accept: 'text/html' }
+          });
+          if (!response.ok) {
+            const chunks = [];
+            let remaining = 8192;
+            for await (const chunk of response.body ?? []) {
+              const prefix = chunk.subarray(0, remaining);
+              chunks.push(prefix);
+              remaining -= prefix.length;
+              if (!remaining) break;
+            }
+            const excerpt = Buffer.concat(chunks).toString('utf8');
+            const contentType = response.headers.get('content-type')?.match(/^[\w.+-]+\/[\w.+-]+/)?.[0];
+            const signals = {
+              automationDenied: /(?:automated (?:traffic|requests?|access) (?:is |are )?(?:denied|blocked|not allowed)|bots? (?:are |is )?(?:blocked|not allowed))/i.test(excerpt),
+              humanVerification: /(?:verify (?:that )?you are human|confirm you are (?:a )?human|verify you are not a robot)/i.test(excerpt),
+              accessDenied: /(?:access denied|you don.t have permission to access|request blocked|アクセスが拒否)/i.test(excerpt)
+            };
+            console.log(JSON.stringify({ source, status: response.status, contentType, bodyBytesInspected: 8192 - remaining, ...signals }));
+            process.exitCode = 1;
+          } else {
+            const rows = parseDailyHtml(await response.text(), date);
+            console.log(`Official guide ${date} returned HTTP ${response.status} with ${rows.length} validated programmes`);
+          }
+          JS
       - name: Install ordinary full Chromium
         run: npx --no-install playwright install --with-deps chromium --no-shell
       - name: Export fresh official guest and eight-day QVC guides
