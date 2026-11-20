@@ -42,3 +42,29 @@ for (const [name, url] of Object.entries(targets)) {
     console.log(JSON.stringify({ name, failure: error.name, code: error.cause?.code }));
   }
 }
+
+const viewerUrl = 'https://qvc.jp/files/information/bookviewer/202611/index.html';
+const viewer = await fetch(viewerUrl, { signal: AbortSignal.timeout(25_000) });
+console.log(JSON.stringify({ name: 'monthlyIssue', status: viewer.status,
+  mime: viewer.headers.get('content-type')?.split(';')[0] }));
+if (viewer.ok) {
+  const markup = await viewer.text();
+  const references = [...markup.matchAll(/(?:src|href)=["']([^"']+)["']/gi)]
+    .map(match => new URL(match[1], viewerUrl)).filter(url => url.origin === 'https://qvc.jp')
+    .map(url => url.pathname).filter(path => /\.(?:js|json|pdf|xml)$/i.test(path));
+  const linkedPdf = [...markup.matchAll(/[\w./-]+\.pdf\b/gi)].map(match => match[0]).slice(0, 8);
+  console.log(JSON.stringify({ name: 'monthlyIssueMarkup', references: [...new Set(references)].slice(0, 24), linkedPdf }));
+}
+const guestPage = await fetch(SOURCE_URL, { signal: AbortSignal.timeout(25_000) });
+if (guestPage.ok) {
+  const markup = await guestPage.text();
+  const scriptUrls = [...markup.matchAll(/https?:\/\/cdn-(?:edge|blocks)\.karte\.io\/[a-z0-9/_-]+\/(?:edge|builder)\.js/gi)]
+    .map(match => match[0]);
+  for (const url of [...new Set(scriptUrls)].slice(0, 4)) {
+    const script = await fetch(url, { signal: AbortSignal.timeout(25_000), redirect: 'manual' });
+    const contentType = script.headers.get('content-type')?.split(';')[0];
+    console.log(JSON.stringify({ name: 'guestDependency', host: new URL(url).hostname,
+      status: script.status, contentType }));
+    await script.body?.cancel();
+  }
+}
