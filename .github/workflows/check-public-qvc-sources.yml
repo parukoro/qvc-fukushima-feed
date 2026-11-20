@@ -1,4 +1,4 @@
-name: Extract QVC NextQ planned programmes
+name: Verify QVC programme and guest sources
 on:
   push:
     branches: [main, codex/qvc-official-source-check]
@@ -27,5 +27,68 @@ jobs:
         with:
           name: nextq-planned-guide
           path: nextq-planned.json
+          if-no-files-found: error
+          retention-days: 3
+  guest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check official KARTE status
+        id: karte
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFile } from 'node:fs/promises';
+          let ready = true;
+          try {
+            const response = await fetch('https://status.karte.io/api/v2/components.json', {
+              signal: AbortSignal.timeout(15000)
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const { components } = await response.json();
+            const blocks = components.find(component => component.name.trim() === 'KARTE Blocks');
+            if (!blocks) throw new Error('KARTE Blocks component missing');
+            console.log('KARTE Blocks status: ' + blocks.status);
+            ready = blocks.status !== 'major_outage';
+          } catch (error) {
+            console.log('KARTE status unavailable; check the ordinary QVC guest page once.');
+          }
+          if (!ready) console.log('::notice::KARTE reports a major outage. Guest acquisition will wait for the next scheduled check.');
+          await appendFile(process.env.GITHUB_OUTPUT, 'ready=' + ready + '\n');
+          JS
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        if: steps.karte.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        if: steps.karte.outputs.ready == 'true'
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install pinned dependencies
+        if: steps.karte.outputs.ready == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install ordinary Chromium
+        if: steps.karte.outputs.ready == 'true'
+        run: npx --no-install playwright install --with-deps chromium --no-shell
+      - name: Verify the live guest appearance feed independently
+        if: steps.karte.outputs.ready == 'true'
+        env:
+          QVC_FEED_BROWSER_MODE: headed
+        run: |
+          xvfb-run -a node scraper.mjs > qvc-fukushima-preview.json
+          node --input-type=module <<'JS'
+          import { readFile } from 'node:fs/promises';
+          import { responseFor, validateSavedFeed } from './feed.mjs';
+          const feed = JSON.parse(await readFile('qvc-fukushima-preview.json', 'utf8'));
+          if (!validateSavedFeed(feed) || responseFor(feed).body.status !== 'fresh') {
+            throw new Error('Invalid or stale guest feed');
+          }
+          console.log('Verified official guest appearance records: ' + feed.programmes.length);
+          JS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.karte.outputs.ready == 'true'
+        with:
+          name: qvc-guest-live-preview
+          path: qvc-fukushima-preview.json
           if-no-files-found: error
           retention-days: 3
