@@ -94,8 +94,9 @@ export function validateWeeklyFeed(feed,now=Date.now()) {
 export async function fetchDailyGuides({fetchImpl=fetch,clock=Date.now}={}) {
   const dates = dailyDates(clock()), result = [];
   for (const date of dates) {
+    const source = dailySource(date);
     try {
-      const response = await fetchImpl(dailySource(date),{redirect:'error',signal:AbortSignal.timeout(30_000),headers:{Accept:'text/html'}});
+      const response = await fetchImpl(source,{redirect:'error',signal:AbortSignal.timeout(30_000),headers:{Accept:'text/html'}});
       if (!response.ok) throw new Error(`Official daily guide HTTP ${response.status}`);
       const bytes = [];
       let size = 0;
@@ -105,8 +106,8 @@ export async function fetchDailyGuides({fetchImpl=fetch,clock=Date.now}={}) {
     } catch (error) {
       // Today is required. A later day that is not published (or not complete) yet ends the run of
       // consecutive days instead of discarding the whole week.
-      if (result.length === 0) throw error;
-      console.warn(`Daily guide ${date} skipped: ${error.message}`);
+      if (result.length === 0) throw new Error(`Daily guide ${date} (${source}): ${error.message}`, {cause: error});
+      console.warn(`Daily guide ${date} (${source}) skipped: ${error.message}`);
       break;
     }
   }

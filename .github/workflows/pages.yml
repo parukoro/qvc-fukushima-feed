@@ -6,18 +6,20 @@ on:
     # Clients keep using the data for 36 hours, which covers GitHub's delayed or skipped schedules.
     - cron: '43 20 * * *'
   workflow_dispatch:
+  push:
+    branches: [codex/qvc-live-validation]
 
 # Read-only by default; only record-facts can write genuine programme changes.
 permissions:
   contents: read
 
 concurrency:
-  group: qvc-guest-pages
+  group: ${{ github.event_name == 'push' && 'qvc-live-validation' || 'qvc-guest-pages' }}
   cancel-in-progress: false
 
 jobs:
   build:
-    if: github.ref_name == github.event.repository.default_branch
+    if: github.event_name == 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -39,15 +41,49 @@ jobs:
       - name: Install ordinary full Chromium
         run: npx --no-install playwright install --with-deps chromium --no-shell
       - name: Export fresh official guest and eight-day QVC guides
+        id: export
         env:
           QVC_FEED_BROWSER_MODE: headed
         run: xvfb-run -a npm run export
+      - name: Validate generated feeds without deploying
+        if: github.event_name == 'push'
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { dailyDates, validateWeeklyFeed } from './daily.mjs';
+          import { responseFor, validateSavedFeed } from './feed.mjs';
+
+          const read = async path => JSON.parse(await readFile('public/' + path, 'utf8'));
+          const now = Date.now();
+          const weekly = await read('weekly.json');
+          assert.equal(weekly.startDate, dailyDates(now)[0], 'Weekly guide must start today in JST');
+          assert.ok(Date.parse(weekly.expiresUtc) > now, 'Weekly guide must be unexpired');
+          assert.ok(validateWeeklyFeed(weekly, Date.parse(weekly.retrievedUtc)), 'Invalid weekly guide');
+          for (const day of weekly.days) {
+            assert.deepEqual(await read('daily/' + day.date + '.json'), day);
+          }
+          console.log(`Validated ${weekly.days.length} complete daily guides from ${weekly.startDate}, expiring ${weekly.expiresUtc}`);
+
+          const guest = await read('qvc-fukushima.json');
+          assert.ok(validateSavedFeed(guest) && responseFor(guest, now).body.status === 'fresh', 'Invalid or expired guest feed');
+          console.log(`Validated ${guest.programmes.length} guest appearances, expiring ${guest.expiresUtc}`);
+          JS
+      - name: Check guest acquisition separately if export failed
+        if: failure() && github.event_name == 'push' && steps.export.outcome == 'failure'
+        run: |
+          xvfb-run -a node --input-type=module <<'JS'
+          import { scrapeOfficialGuest } from './scraper.mjs';
+          const guest = await scrapeOfficialGuest({ browserMode: 'headed' });
+          console.log(`Guest acquisition yielded ${guest.programmes.length} appearances, expiring ${guest.expiresUtc}`);
+          JS
       - name: Prepare canonical programme facts without refresh timestamps
         id: facts
         # Skipped when this run published the guides without a guest feed.
-        if: hashFiles('public/qvc-fukushima.json') != ''
+        if: github.event_name != 'push' && hashFiles('public/qvc-fukushima.json') != ''
         run: node record-facts.mjs --output-for-actions
       - name: Upload only generated public files
+        if: github.event_name != 'push'
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4 verified 2026-11-01
         with:
           path: public
@@ -55,6 +91,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
