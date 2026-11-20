@@ -1,4 +1,7 @@
 
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { dailyDates } from './daily.mjs';
 
 const INDEX = 'https://qvc.jp/information/bookviewer.html';
@@ -29,7 +32,7 @@ const linesOf = glyphs => {
 };
 const lineText = row => row.map(g=>g.text).join('').trim();
 
-export function parseSchedulePage(raw, month) {
+export function parseSchedulePage(raw, month, requestedDates = null) {
   if (!Array.isArray(raw) || raw.length > 10_000) throw new Error('Invalid NextQ page');
   const glyphs = raw.map(g=>({ x:Number(g.x), y:Number(g.y), h:Number(g.height), w:Number(g.width), text:g.text }))
     .filter(g=>g.x>=0&&g.x<=450&&g.y>=0&&g.y<=610&&g.h>0&&g.w>=0&&typeof g.text==='string');
@@ -51,9 +54,9 @@ export function parseSchedulePage(raw, month) {
   }
 
   const starts = expected.map(hour=>hour===0 ? 61 : hour===2 ? clock.get(1).y+10 : clock.get(hour).y-step*0.61);
-  return days.map(({date:day,index})=>{
+  const datedColumns = days.map(({date,index})=>({date:month+String(date).padStart(2,'0'),index}));
+  return datedColumns.filter(({date})=>!requestedDates||requestedDates.includes(date)).map(({date,index})=>{
     const glyphs = columns[index];
-    const date = month+String(day).padStart(2,'0');
     const iso = date.replace(/^(....)(..)(..)$/, '$1-$2-$3');
     if (new Date(iso).toISOString().slice(0,10)!==iso) throw new Error('Invalid NextQ date');
     const rows = starts.map((start,i)=>{
@@ -74,6 +77,7 @@ export async function checkNextQ({fetchImpl=fetch,now=Date.now()}={}) {
   const issues = new Map([...index.matchAll(/(?:https:\/\/qvc\.jp)?(\/files\/information\/bookviewer\/(20\d{2}(?:0[1-9]|1[0-2]))\/index\.html)\b/g)]
     .map(([,path,month])=>[month,new URL(path,INDEX)]));
   const days = new Map();
+  const duplicates = new Set();
   const problems = [];
   for (const month of new Set(needed.map(date=>date.slice(0,6)))) {
     const issue = issues.get(month);
@@ -86,10 +90,14 @@ export async function checkNextQ({fetchImpl=fetch,now=Date.now()}={}) {
       const url = new URL('data/highlight/'+String(page).padStart(4,'0')+'.txt',issue);
       try {
         const entries = await get(url,fetchImpl);
-        for (const day of parseSchedulePage(JSON.parse(entries),month)) {
-          if (!needed.includes(day.date)) continue;
-          if (days.has(day.date)) throw new Error(`Duplicate NextQ date ${day.date}`);
-          days.set(day.date,{...day,edition:month,page});
+        for (const day of parseSchedulePage(JSON.parse(entries),month,needed)) {
+          if (days.has(day.date) || duplicates.has(day.date)) {
+            duplicates.add(day.date);
+            days.delete(day.date);
+            problems.push(`Duplicate NextQ date ${day.date}`);
+            continue;
+          }
+          days.set(day.date,{...day,edition:month,page,source:issue.href});
         }
       } catch (error) { problems.push(`Page ${page}: ${error.message}`); }
     }
@@ -97,8 +105,14 @@ export async function checkNextQ({fetchImpl=fetch,now=Date.now()}={}) {
   return { found:needed.filter(date=>days.has(date)).map(date=>days.get(date)),missing:needed.filter(date=>!days.has(date)),problems };
 }
 
-const result = await checkNextQ();
-console.log(JSON.stringify({ type:'planned-schedule-extraction', missing:result.missing, problems:result.problems,
-  days:result.found.map(d=>({date:d.date,page:d.page,slots:d.rows.length,
-    sampleHours:d.rows.filter(r=>[0,7,14,20].includes(r.startHour))})) }));
-if (result.missing.length) process.exitCode=1;
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const result = await checkNextQ();
+  console.log(JSON.stringify({type:'planned-schedule-extraction',missing:result.missing,problems:result.problems,
+    days:result.found.map(({date,page,rows})=>({date,page,slots:rows.length}))}));
+  if (result.missing.length) {
+    process.exitCode=1;
+  } else if (process.argv[2]) {
+    await writeFile(process.argv[2],JSON.stringify({schemaVersion:1,status:'planned',source:INDEX,
+      checkedUtc:new Date().toISOString(),days:result.found},null,2)+'\n','utf8');
+  }
+}
