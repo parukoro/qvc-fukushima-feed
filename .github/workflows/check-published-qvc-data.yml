@@ -1,0 +1,36 @@
+name: Check published QVC data
+on:
+  push:
+    branches: [codex/qvc-official-source-check]
+    paths: ['.github/workflows/check-published-qvc-data.yml']
+permissions: {}
+jobs:
+  public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Inspect the existing public JSON endpoints
+        run: |
+          node --input-type=module <<'JS'
+          const base = new URL('https://parukoro.github.io/qvc-fukushima-feed/');
+          const date = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit'})
+            .format(new Date()).replaceAll('-', '');
+          for (const path of ['weekly.json', 'qvc-fukushima.json', `daily/${date}.json`]) {
+            try {
+              const response = await fetch(new URL(path, base), {signal:AbortSignal.timeout(12000), redirect:'manual', cache:'no-store'});
+              const summary = {path,status:response.status};
+              if (response.ok) {
+                const {retrievedUtc,expiresUtc,startDate,days,programmes} = await response.json();
+                const expiration = Date.parse(expiresUtc);
+                Object.assign(summary, {retrievedUtc,expiresUtc,startDate,
+                  expired: Number.isFinite(expiration) ? expiration <= Date.now() : null,
+                  dates:Array.isArray(days) ? days.map(day => day.date) : undefined,
+                  programmes:Array.isArray(programmes) ? programmes.length : undefined});
+              }
+              console.log(JSON.stringify(summary));
+            } catch (error) {
+              console.log(JSON.stringify({path,error:error.name,code:error.cause?.code}));
+              process.exitCode = 1;
+            }
+          }
+          JS
