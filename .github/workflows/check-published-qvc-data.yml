@@ -34,3 +34,14 @@ jobs:
             }
           }
           JS
+  nextq-month-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Validate the actual planned-date coverage
+        run: node probe-official-sources.mjs
