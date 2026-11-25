@@ -48,13 +48,27 @@ export function parseSchedulePage(raw, month, requestedDates = null) {
   const columns = Array.from({length:4},(_,i)=>glyphs.filter(g=>g.x>=left+i*width&&g.x<left+(i+1)*width));
   const headings = columns.map(col=>lineText(col.filter(g=>g.y>=47&&g.y<=52&&g.h>=20&&/^\d$/.test(g.text)).sort((a,b)=>a.x-b.x)));
   const days = headings.flatMap((heading,index)=>/^\d{1,2}$/.test(heading)?[{date:Number(heading),index}]:[]);
-  if (days.length<1 || !days.every(({date,index},i)=>date>=1&&date<=31&&
-      (i===0||(date===days[i-1].date+1&&index===days[i-1].index+1)))) {
-    throw new Error('Cannot confirm consecutive NextQ dates: '+JSON.stringify(headings));
+  if (!days.length || days.some(({ index }, i) => i > 0 && index !== days[i - 1].index + 1)) {
+    throw new Error('Cannot confirm consecutive NextQ columns: ' + JSON.stringify(headings));
+  }
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(4)) - 1;
+  const wraps = days.some(({ date }, i) => i > 0 && date < days[i - 1].date);
+  const startingMonths = wraps ? [monthIndex - 1, monthIndex] : [monthIndex];
+  const candidates = startingMonths.map(startingMonth => days.map(({ index }, i) => {
+    const calendarDate = new Date(Date.UTC(year, startingMonth, days[0].date + i));
+    const date = calendarDate.toISOString().slice(0, 10).replaceAll('-', '');
+    return { date, index, dayOfMonth: calendarDate.getUTCDate() };
+  })).filter(sequence =>
+    sequence.every((column, i) => column.dayOfMonth === days[i].date) &&
+    sequence.some(column => column.date.startsWith(month)));
+  if (candidates.length !== 1) {
+    throw new Error('Cannot assign unambiguous NextQ dates: ' + JSON.stringify(headings));
   }
 
   const starts = expected.map(hour=>hour===0 ? 61 : hour===2 ? clock.get(1).y+10 : clock.get(hour).y-step*0.61);
-  const datedColumns = days.map(({date,index})=>({date:month+String(date).padStart(2,'0'),index}));
+  // An issue can show adjacent months, but only its own dates are collected.
+  const datedColumns = candidates[0].filter(column => column.date.startsWith(month));
   return datedColumns.filter(({date})=>!requestedDates||requestedDates.includes(date)).map(({date,index})=>{
     const glyphs = columns[index];
     const iso = date.replace(/^(....)(..)(..)$/, '$1-$2-$3');

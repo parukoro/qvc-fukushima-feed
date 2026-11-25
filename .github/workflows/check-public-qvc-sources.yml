@@ -1,7 +1,7 @@
 name: Verify QVC programme and guest sources
 on:
   push:
-    branches: [main, codex/qvc-official-source-check]
+    branches: [main]
     paths:
       - '.github/workflows/check-public-qvc-sources.yml'
       - 'probe-official-sources.mjs'

@@ -2,7 +2,7 @@ name: Check published QVC data
 on:
   push:
     branches: [codex/qvc-official-source-check]
-    paths: ['.github/workflows/check-published-qvc-data.yml']
+    paths: ['.github/workflows/check-published-qvc-data.yml', 'probe-official-sources.mjs']
 permissions: {}
 jobs:
   public:
